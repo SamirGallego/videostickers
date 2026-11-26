@@ -13,7 +13,8 @@ Todo se procesa en el navegador (no hay servidor), por eso funciona en GitHub Pa
 ## Uso
 - Controles: ▶/⏸, ±1 s, ±1 cuadro, bucle del fragmento, zoom.
 - Forma de onda: clic para mover el cursor; arrastra la zona verde o sus bordes para ajustar el fragmento.
-- Atajos: `Espacio` play · `←/→` cuadro · `Shift+←/→` 1 s · `I` inicio · `O` fin · `L` bucle · `Z` zoom.
+- Rotación: ⟲/⟳ 90°, espejo y ajuste fino (±45°) para enderezar videos torcidos.
+- Atajos: `Espacio` play · `←/→` cuadro · `Shift+←/→` 1 s · `I` inicio · `O` fin · `L` bucle · `Z` zoom · `Q/E` girar · `M` espejo.
 
 ## Compatibilidad
 Chrome, Edge, Firefox y Chrome de Android. Safari no puede crear WebP.

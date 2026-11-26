@@ -21,7 +21,10 @@
   .drop.over { border-color: var(--acc); color: var(--txt); }
   .editor { display:none; }
   .stage { position:relative; line-height:0; user-select:none; }
-  .stage video { width:100%; max-height:55vh; object-fit:contain; background:#000; border-radius:8px; }
+  .stage { background:#000; border-radius:8px; min-height:120px; }
+  .stage video { position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+  .stage canvas { display:block; margin:0 auto; }
+  input[type=range].fine { width:auto; flex:1; min-width:120px; }
   .shade { position:absolute; inset:0; overflow:hidden; pointer-events:none; border-radius:8px; }
   .crop { position:absolute; border:2px solid var(--acc); box-shadow:0 0 0 9999px rgba(0,0,0,.55); cursor:move; touch-action:none; border-radius:4px; pointer-events:auto; }
   .crop.off { display:none; }
@@ -70,6 +73,7 @@
       <div id="editor" class="editor">
         <div class="stage">
           <video id="video" playsinline preload="auto"></video>
+          <canvas id="viewer"></canvas>
           <div class="shade"><div id="crop" class="crop"></div></div>
           <div id="msg" class="msg"></div>
         </div>
@@ -92,7 +96,7 @@
           <button id="bZoom" title="Acercar la vista al fragmento (Z)">🔍 Zoom fragmento</button>
         </div>
         <div class="note" style="margin-top:6px">
-          Atajos: <kbd>Espacio</kbd> play · <kbd>←</kbd><kbd>→</kbd> cuadro · <kbd>Shift</kbd>+flechas 1 s · <kbd>I</kbd> inicio aquí · <kbd>O</kbd> fin aquí · <kbd>L</kbd> bucle · <kbd>Z</kbd> zoom
+          Atajos: <kbd>Espacio</kbd> play · <kbd>←</kbd><kbd>→</kbd> cuadro · <kbd>Shift</kbd>+flechas 1 s · <kbd>I</kbd> inicio aquí · <kbd>O</kbd> fin aquí · <kbd>L</kbd> bucle · <kbd>Z</kbd> zoom · <kbd>Q</kbd><kbd>E</kbd> girar · <kbd>M</kbd> espejo
         </div>
       </div>
     </section>
@@ -106,6 +110,19 @@
       <div id="cropSizeWrap">
         <label>Tamaño del recorte (arrastra el cuadro sobre el video)</label>
         <input id="cropSize" type="range" min="20" max="100" value="100">
+      </div>
+
+      <label>Rotación</label>
+      <div class="row">
+        <button id="bRotL" title="Girar 90° a la izquierda (Q)">⟲ 90°</button>
+        <button id="bRotR" title="Girar 90° a la derecha (E)">⟳ 90°</button>
+        <button id="bFlip" title="Voltear como espejo (M)">⇋ Espejo</button>
+        <button id="bRotReset" title="Quitar rotación">Restablecer</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <span class="note">Ajuste fino</span>
+        <input id="fine" class="fine" type="range" min="-45" max="45" step="0.5" value="0">
+        <span id="rotInfo" class="note" style="min-width:44px;text-align:right">0°</span>
       </div>
 
       <label>Fragmento</label>

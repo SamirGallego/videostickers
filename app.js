@@ -6,6 +6,50 @@ const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
 const st = { url: null, name: 'sticker', start: 0, dur: 5, fps: 30, audio: null, peaks: null, rate: 100, maxPeak: 1, zoom: false, loop: false };
 let view = { v0: 0, v1: 1 }, dragging = false, mode = 'crop', box = { x: 0, y: 0, w: 1, h: 1 }, outUrls = [];
 const T = () => (isFinite(video.duration) ? video.duration : 0);
+const viewer = $('viewer');
+
+// ================= rotación =================
+const rot = { q: 0, fine: 0, flip: false }; // q = giros de 90°, fine = grados extra
+const rotDims = (vw, vh) => (rot.q % 2 ? [vh, vw] : [vw, vh]); // tamaño del cuadro ya rotado
+function drawRotated(g, src, vw, vh, scale = 1) {
+  const [rw, rh] = rotDims(vw, vh);
+  g.save();
+  g.scale(scale, scale);
+  g.translate(rw / 2, rh / 2);
+  g.rotate((rot.q * 90 + rot.fine) * Math.PI / 180);
+  if (rot.flip) g.scale(-1, 1);
+  g.drawImage(src, -vw / 2, -vh / 2, vw, vh);
+  g.restore();
+}
+function setRot(fn) {
+  fn();
+  rot.q = ((rot.q % 4) + 4) % 4;
+  $('fine').value = rot.fine;
+  $('rotInfo').textContent = `${(rot.q * 90 + rot.fine + 360) % 360}°${rot.flip ? ' ⇋' : ''}`;
+  layoutViewer(); setCropSize(); renderViewer();
+}
+$('bRotL').onclick = () => setRot(() => rot.q--);
+$('bRotR').onclick = () => setRot(() => rot.q++);
+$('bFlip').onclick = () => setRot(() => { rot.flip = !rot.flip; });
+$('bRotReset').onclick = () => setRot(() => { rot.q = 0; rot.fine = 0; rot.flip = false; });
+$('fine').oninput = () => setRot(() => { rot.fine = +$('fine').value; });
+
+// vista previa: el video se dibuja rotado en un canvas
+function layoutViewer() {
+  if (!video.videoWidth) return;
+  const [rw, rh] = rotDims(video.videoWidth, video.videoHeight);
+  const W = viewer.parentElement.clientWidth, H = Math.max(200, window.innerHeight * 0.55);
+  const s = Math.min(W / rw, H / rh), dpr = window.devicePixelRatio || 1;
+  viewer.style.width = rw * s + 'px'; viewer.style.height = rh * s + 'px';
+  viewer.width = Math.round(rw * s * dpr); viewer.height = Math.round(rh * s * dpr);
+  drawCrop();
+}
+function renderViewer() {
+  if (!video.videoWidth) return;
+  const g = viewer.getContext('2d'), [rw] = rotDims(video.videoWidth, video.videoHeight);
+  g.clearRect(0, 0, viewer.width, viewer.height);
+  drawRotated(g, video, video.videoWidth, video.videoHeight, viewer.width / rw);
+}
 
 // ¿El navegador sabe codificar WebP? (Chrome, Edge, Firefox y Android sí; Safari no)
 const canWebp = (() => { const c = document.createElement('canvas'); c.width = c.height = 2; return c.toDataURL('image/webp').startsWith('data:image/webp'); })();
@@ -63,11 +107,12 @@ video.onloadedmetadata = () => {
   showMsg('');
   st.start = 0; st.dur = Math.min(5, T());
   $('gen').disabled = !canWebp;
-  setCropSize(); updateView(); syncInputs(); draw();
+  layoutViewer(); setCropSize(); updateView(); syncInputs(); draw();
 };
+video.onloadeddata = renderViewer;
 video.onplay = video.onpause = () => { $('bPlay').textContent = video.paused ? '▶' : '⏸'; if (!video.paused) { tick(); detectFps(); } };
-video.onseeked = draw;
-window.addEventListener('resize', () => { drawCrop(); draw(); });
+video.onseeked = () => { renderViewer(); draw(); };
+window.addEventListener('resize', () => { layoutViewer(); renderViewer(); draw(); });
 
 let fpsDetected = false;
 function detectFps() { // estima los fps reales para el avance cuadro a cuadro
@@ -106,7 +151,7 @@ $('bZoom').onclick = () => toggleZoom();
 function toggleZoom() { st.zoom = !st.zoom; $('bZoom').classList.toggle('on', st.zoom); updateView(); draw(); }
 function tick() { // cursor fluido + bucle del fragmento
   if (st.loop && video.currentTime >= st.start + st.dur) video.currentTime = st.start;
-  draw();
+  renderViewer(); draw();
   if (!video.paused) requestAnimationFrame(tick);
 }
 document.addEventListener('keydown', e => {
@@ -120,6 +165,9 @@ document.addEventListener('keydown', e => {
   else if (k === 'o') setOut(video.currentTime);
   else if (k === 'l') setLoop(!st.loop);
   else if (k === 'z') toggleZoom();
+  else if (k === 'q') $('bRotL').click();
+  else if (k === 'e') $('bRotR').click();
+  else if (k === 'm') $('bFlip').click();
 });
 
 // ================= fragmento =================
@@ -231,18 +279,17 @@ wave.onpointerdown = e => {
 };
 
 // ================= recorte =================
-function setCropSize() {
-  const vw = video.videoWidth, vh = video.videoHeight; if (!vw) return;
+function setCropSize() { // el recorte se mide sobre el cuadro ya rotado
+  if (!video.videoWidth) return;
+  const [vw, vh] = rotDims(video.videoWidth, video.videoHeight);
   const side = Math.min(vw, vh) * $('cropSize').value / 100;
   const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
   box.w = side / vw; box.h = side / vh;
   box.x = clamp(cx - box.w / 2, 0, 1 - box.w); box.y = clamp(cy - box.h / 2, 0, 1 - box.h);
   drawCrop();
 }
-function videoRect() { // área real del video dentro del elemento (object-fit: contain)
-  const ew = video.clientWidth, eh = video.clientHeight, ar = video.videoWidth / video.videoHeight;
-  let w = ew, h = ew / ar; if (h > eh) { h = eh; w = eh * ar; }
-  return { left: (ew - w) / 2, top: (eh - h) / 2, w, h };
+function videoRect() { // posición del canvas de vista previa dentro del contenedor
+  return { left: viewer.offsetLeft, top: viewer.offsetTop, w: viewer.clientWidth, h: viewer.clientHeight };
 }
 function drawCrop() {
   if (!video.videoWidth) return;
@@ -263,7 +310,7 @@ crop.onpointerdown = e => {
   };
   crop.onpointerup = () => { crop.onpointermove = null; if (!moved) togglePlay(); }; // clic sin arrastrar = play/pausa
 };
-video.onclick = togglePlay;
+viewer.onclick = togglePlay;
 document.querySelectorAll('#mode button').forEach(b => b.onclick = () => {
   mode = b.dataset.m;
   document.querySelectorAll('#mode button').forEach(x => x.classList.toggle('on', x === b));
@@ -283,19 +330,23 @@ async function grabFrames(start, dur, fps, onProgress) {
   const v = document.createElement('video');
   v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = st.url;
   await once(v, 'loadeddata');
-  const vw = v.videoWidth, vh = v.videoHeight;
+  const ow = v.videoWidth, oh = v.videoHeight, [vw, vh] = rotDims(ow, oh);
+  const rc = document.createElement('canvas'); rc.width = vw; rc.height = vh; // cuadro rotado a resolución original
+  const rg = rc.getContext('2d');
   const c = document.createElement('canvas'); c.width = c.height = SIZE;
   const g = c.getContext('2d');
   const n = Math.max(1, Math.round(dur * fps)), frames = [];
   for (let i = 0; i < n; i++) {
     v.currentTime = Math.min(start + i / fps, start + dur - 0.001);
     await once(v, 'seeked');
+    rg.clearRect(0, 0, vw, vh);
+    drawRotated(rg, v, ow, oh);
     g.clearRect(0, 0, SIZE, SIZE);
     if (mode === 'crop') {
-      g.drawImage(v, box.x * vw, box.y * vh, box.w * vw, box.h * vh, 0, 0, SIZE, SIZE);
+      g.drawImage(rc, box.x * vw, box.y * vh, box.w * vw, box.h * vh, 0, 0, SIZE, SIZE);
     } else { // video completo con bordes transparentes
       const s = SIZE / Math.max(vw, vh), w = vw * s, h = vh * s;
-      g.drawImage(v, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
+      g.drawImage(rc, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
     }
     frames.push(await createImageBitmap(c));
     if (onProgress) onProgress((i + 1) / n);
