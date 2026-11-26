@@ -18,5 +18,8 @@ Todo se procesa en el navegador (no hay servidor), por eso funciona en GitHub Pa
 - Atajos: `Espacio` play · `←/→` cuadro · `Shift+←/→` 1 s · `I` inicio · `O` fin · `L` bucle · `Z` zoom · `Q/E` girar · `M` espejo.
 
 ## Compatibilidad
-Chrome, Edge, Firefox y Chrome de Android. Safari no puede crear WebP.
+Chrome, Edge, Firefox, Chrome de Android y Safari/iPhone (en Safari el WebP se codifica con libwebp en WebAssembly, que se descarga solo cuando hace falta).
+En el celular aparece un botón **Compartir** para mandar el sticker directo a WhatsApp.
+
+El `.webp` es animado, pero muchas galerías muestran solo el primer cuadro; en WhatsApp o en el navegador sí se anima. También se puede bajar un `.gif` para ver o compartir la animación en cualquier lado (WhatsApp no acepta GIF como sticker).
 Videos HEVC (H.265, iPhone) solo se abren si el navegador los reproduce; si no, conviértelos a MP4 H.264.

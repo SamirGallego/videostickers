@@ -36,8 +36,8 @@
   .editor { display:none; }
 
   .stage { position:relative; line-height:0; user-select:none; background:var(--stage); min-height:120px; overflow:hidden; }
-  .stage video { position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
-  .stage canvas { display:block; margin:0 auto; }
+  #vbox { position:relative; margin:0 auto; overflow:hidden; }
+  #vbox video { position:absolute; left:50%; top:50%; max-width:none; display:block; }
   .shade { position:absolute; inset:0; overflow:hidden; pointer-events:none; }
   .crop { position:absolute; outline:2px solid var(--acc); box-shadow:0 0 0 9999px rgba(10,10,10,.6); cursor:move; touch-action:none; pointer-events:auto; }
   .crop::before, .crop::after { content:""; position:absolute; left:33.33%; right:33.33%; top:0; bottom:0; border-left:1px solid rgba(255,255,255,.35); border-right:1px solid rgba(255,255,255,.35); }
@@ -94,6 +94,15 @@
   #info .warn { color:#c2410c; }
   .files { display:grid; gap:4px; margin-top:10px; }
   .files .btn { text-align:left; padding:10px; }
+  /* pantallas táctiles: botones más grandes, sin atajos de teclado */
+  @media (pointer: coarse) {
+    button, .btn { min-height:42px; padding:10px 12px; }
+    .transport button { flex:1 1 0; min-width:0; padding:10px 4px; }
+    .keys { display:none; }
+    #wave { height:120px; }
+    input[type=number] { min-height:42px; font-size:16px; }
+    select { min-height:42px; font-size:16px; }
+  }
   ol { padding-left:18px; color:var(--mute); font-size:12px; margin:12px 0 0; }
 </style>
 </head>
@@ -111,8 +120,7 @@
 
       <div id="editor" class="editor">
         <div class="stage">
-          <video id="video" playsinline preload="auto"></video>
-          <canvas id="viewer"></canvas>
+          <div id="vbox"><video id="video" playsinline preload="auto"></video></div>
           <div class="shade"><div id="crop" class="crop"></div></div>
           <div id="msg" class="msg"></div>
         </div>
@@ -191,10 +199,12 @@
         <img id="outImg" class="preview" alt="sticker">
         <audio id="outAud" controls></audio>
         <button id="playBoth">▶ probar imagen + sonido</button>
+        <button id="shareBtn" class="go" style="display:none;margin-top:6px">Compartir (WhatsApp…)</button>
         <div id="info"></div>
         <div id="files" class="files"></div>
         <ol>
           <li>Descarga el <b>.webp</b> y el <b>.mp3</b> (desde el celular quedan ahí mismo).</li>
+          <li>El <b>.webp</b> sí es animado, pero muchas galerías y el visor de fotos solo muestran el primer cuadro. En WhatsApp o en el navegador se ve animado. El <b>.gif</b> es para verlo o compartirlo en cualquier lado (WhatsApp no lo acepta como sticker).</li>
           <li>En WhatsApp crea el sticker con la imagen y elige el audio en la opción de sonido.</li>
           <li>Ambos empiezan y duran exactamente lo mismo: quedan sincronizados.</li>
         </ol>
