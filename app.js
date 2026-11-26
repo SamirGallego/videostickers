@@ -37,15 +37,27 @@ $('fine').oninput = () => setRot(() => { rot.fine = +$('fine').value; });
 // vista previa: se muestra el <video> nativo y se rota con CSS. Así adelantar/atrasar funciona igual
 // en celulares (dibujar un video oculto en un canvas no se actualizaba al buscar en Android/iPhone).
 function layoutViewer() {
-  if (!video.videoWidth) return;
+  const W = viewer.parentElement.clientWidth;
+  if (!video.videoWidth || !W) { // aún sin medidas: mostrar el video tal cual, sin transformar
+    viewer.style.width = '100%'; viewer.style.height = 'auto';
+    video.style.cssText = 'position:static;width:100%;height:auto;transform:none';
+    return;
+  }
   const vw = video.videoWidth, vh = video.videoHeight, [rw, rh] = rotDims(vw, vh);
-  const W = viewer.parentElement.clientWidth, H = Math.max(200, window.innerHeight * 0.55);
-  const s = Math.min(W / rw, H / rh);
+  const H = Math.max(200, window.innerHeight * 0.55), s = Math.min(W / rw, H / rh);
   viewer.style.width = rw * s + 'px'; viewer.style.height = rh * s + 'px';
-  video.style.width = vw * s + 'px'; video.style.height = vh * s + 'px';
-  video.style.transform = `translate(-50%, -50%) rotate(${rot.q * 90 + rot.fine}deg)${rot.flip ? ' scaleX(-1)' : ''}`;
+  const ang = rot.q * 90 + rot.fine;
+  if (!ang && !rot.flip) { // sin rotación: video normal, sin transformaciones (lo más compatible)
+    video.style.cssText = `position:absolute;left:0;top:0;width:${rw * s}px;height:${rh * s}px;transform:none`;
+  } else {
+    video.style.cssText = `position:absolute;left:50%;top:50%;width:${vw * s}px;height:${vh * s}px;` +
+      `transform:translate(-50%,-50%) rotate(${ang}deg)${rot.flip ? ' scaleX(-1)' : ''}`;
+  }
   drawCrop();
 }
+// recalcular cuando el video informa sus medidas (en algunos celulares llegan tarde) o cambia el ancho
+['loadedmetadata', 'loadeddata', 'resize', 'canplay'].forEach(ev => video.addEventListener(ev, () => { layoutViewer(); setCropSize(); }));
+if (window.ResizeObserver) new ResizeObserver(() => { layoutViewer(); draw(); }).observe(viewer.parentElement);
 function renderViewer() { /* el navegador pinta el video solo */ }
 
 // ¿El navegador sabe codificar WebP? (Chrome, Edge, Firefox y Android sí; Safari/iPhone no -> se usa WebAssembly)
@@ -124,7 +136,7 @@ window.addEventListener('resize', () => { layoutViewer(); renderViewer(); draw()
 async function primeAndMeasureFps() {
   const times = [];
   try {
-    video.muted = true;
+    video.muted = true; video.setAttribute('muted', '');
     const done = new Promise(res => {
       if (!video.requestVideoFrameCallback) return setTimeout(res, 400);
       const cb = (now, m) => { times.push(m.mediaTime); if (times.length < 25) video.requestVideoFrameCallback(cb); else res(); };
@@ -134,7 +146,7 @@ async function primeAndMeasureFps() {
     await video.play();
     await done;
   } catch { /* sin reproducción automática: seguimos con 30 fps */ }
-  video.pause(); video.muted = false;
+  video.pause(); video.muted = false; video.removeAttribute('muted');
   await seekTo(video, 0);
   const d = []; for (let i = 1; i < times.length; i++) if (times[i] > times[i - 1]) d.push(times[i] - times[i - 1]);
   if (d.length < 4) return 30;

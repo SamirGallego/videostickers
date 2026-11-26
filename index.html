@@ -37,7 +37,7 @@
 
   .stage { position:relative; line-height:0; user-select:none; background:var(--stage); min-height:120px; overflow:hidden; }
   #vbox { position:relative; margin:0 auto; overflow:hidden; }
-  #vbox video { position:absolute; left:50%; top:50%; max-width:none; display:block; }
+  #vbox video { display:block; max-width:none; background:#000; }
   .shade { position:absolute; inset:0; overflow:hidden; pointer-events:none; }
   .crop { position:absolute; outline:2px solid var(--acc); box-shadow:0 0 0 9999px rgba(10,10,10,.6); cursor:move; touch-action:none; pointer-events:auto; }
   .crop::before, .crop::after { content:""; position:absolute; left:33.33%; right:33.33%; top:0; bottom:0; border-left:1px solid rgba(255,255,255,.35); border-right:1px solid rgba(255,255,255,.35); }
@@ -97,7 +97,9 @@
   /* pantallas táctiles: botones más grandes, sin atajos de teclado */
   @media (pointer: coarse) {
     button, .btn { min-height:42px; padding:10px 12px; }
-    .transport button { flex:1 1 0; min-width:0; padding:10px 4px; }
+    .transport { display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; }
+    .transport button { min-width:0; padding:10px 2px; }
+    .clock { grid-column:1 / -1; margin:2px 0 0; text-align:center; }
     .keys { display:none; }
     #wave { height:120px; }
     input[type=number] { min-height:42px; font-size:16px; }
@@ -213,6 +215,6 @@
   </div>
 </main>
 
-<script src="app.js"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
