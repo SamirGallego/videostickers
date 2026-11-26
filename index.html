@@ -3,71 +3,110 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VideoStickers</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>">
+<title>videostickers</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><rect x=%221%22 y=%221%22 width=%2214%22 height=%2214%22 fill=%22%23ff5a1f%22 stroke=%22%23161514%22 stroke-width=%222%22/></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
 <style>
-  :root { --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --txt:#e8eaf0; --mute:#9aa3b2; --acc:#25d366; --acc2:#1da851; --warn:#f5a524; }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.45 system-ui, Segoe UI, sans-serif; }
-  main { max-width: 1040px; margin: 0 auto; padding: 20px 16px 60px; }
-  h1 { font-size: 22px; margin: 0 0 4px; } h1 span { color: var(--acc); }
-  .sub { color: var(--mute); margin: 0 0 18px; }
-  .grid { display:grid; grid-template-columns: 1.5fr 1fr; gap:16px; align-items:start; }
-  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
-  .drop { border:2px dashed var(--line); border-radius:12px; padding:40px 16px; text-align:center; color:var(--mute); cursor:pointer; }
-  .drop.small { padding:8px; font-size:13px; margin-bottom:10px; }
-  .drop.over { border-color: var(--acc); color: var(--txt); }
+  :root {
+    --paper:#f2efe7; --panel:#fbfaf6; --ink:#161514; --mute:#6f6a60; --line:#161514; --soft:#d9d4c7;
+    --acc:#ff5a1f; --acc-ink:#161514; --wave:#b9b2a3; --stage:#161514;
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper:#141312; --panel:#1c1b19; --ink:#ece8df; --mute:#9a948a; --line:#ece8df; --soft:#3a3732; --wave:#59544c; --stage:#000; }
+  }
+  * { box-sizing:border-box; }
+  html { background:var(--paper); }
+  body { margin:0; color:var(--ink); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:1060px; margin:0 auto; padding:22px 16px 64px; }
+
+  header { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; border-bottom:2px solid var(--line); padding-bottom:10px; margin-bottom:18px; }
+  .logo { font:700 20px/1 var(--mono); letter-spacing:-.5px; }
+  .logo i { display:inline-block; width:12px; height:12px; background:var(--acc); border:2px solid var(--line); margin-right:8px; vertical-align:-1px; }
+  header p { margin:0; color:var(--mute); font-size:13px; }
+
+  .grid { display:grid; grid-template-columns:1.55fr 1fr; gap:18px; align-items:start; }
+  @media (max-width:860px) { .grid { grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:2px solid var(--line); padding:14px; min-width:0; }
+
+  .drop { border:2px dashed var(--line); padding:56px 16px; text-align:center; cursor:pointer; font-family:var(--mono); font-size:14px; }
+  .drop b { background:var(--acc); color:var(--acc-ink); padding:0 4px; font-weight:600; }
+  .drop.small { padding:7px 10px; text-align:left; font-size:12px; margin-bottom:10px; border-style:solid; border-width:1px; }
+  .drop.over { background:var(--acc); }
   .editor { display:none; }
-  .stage { position:relative; line-height:0; user-select:none; }
-  .stage { background:#000; border-radius:8px; min-height:120px; }
+
+  .stage { position:relative; line-height:0; user-select:none; background:var(--stage); min-height:120px; overflow:hidden; }
   .stage video { position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
   .stage canvas { display:block; margin:0 auto; }
-  input[type=range].fine { width:auto; flex:1; min-width:120px; }
-  .shade { position:absolute; inset:0; overflow:hidden; pointer-events:none; border-radius:8px; }
-  .crop { position:absolute; border:2px solid var(--acc); box-shadow:0 0 0 9999px rgba(0,0,0,.55); cursor:move; touch-action:none; border-radius:4px; pointer-events:auto; }
+  .shade { position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+  .crop { position:absolute; outline:2px solid var(--acc); box-shadow:0 0 0 9999px rgba(10,10,10,.6); cursor:move; touch-action:none; pointer-events:auto; }
+  .crop::before, .crop::after { content:""; position:absolute; left:33.33%; right:33.33%; top:0; bottom:0; border-left:1px solid rgba(255,255,255,.35); border-right:1px solid rgba(255,255,255,.35); }
+  .crop::after { left:0; right:0; top:33.33%; bottom:33.33%; border:0; border-top:1px solid rgba(255,255,255,.35); border-bottom:1px solid rgba(255,255,255,.35); }
   .crop.off { display:none; }
-  .msg { position:absolute; inset:0; display:none; align-items:center; justify-content:center; text-align:center; padding:16px; line-height:1.4; background:rgba(0,0,0,.7); color:var(--txt); border-radius:8px; }
-  .transport { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:10px; }
-  .transport button { min-width:42px; padding:7px 9px; }
-  .transport .play { background:var(--acc); color:#06210f; border-color:var(--acc); font-weight:700; min-width:52px; }
-  .clock { margin-left:auto; font-variant-numeric: tabular-nums; color:var(--mute); font-size:13px; }
-  .wavebox { position:relative; margin-top:10px; }
-  #wave { width:100%; height:110px; display:block; background:#11141a; border:1px solid var(--line); border-radius:8px; touch-action:none; }
-  .wavebar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px; font-size:12px; color:var(--mute); }
-  .wavebar .sp { flex:1; }
-  label { display:block; font-size:13px; color:var(--mute); margin:12px 0 4px; }
-  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  input[type=range] { width:100%; accent-color: var(--acc); }
-  input[type=number] { width:96px; background:#0f1115; color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px; font:inherit; }
-  button, .btn { background:#262b36; color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:8px 12px; cursor:pointer; font:inherit; text-decoration:none; display:inline-block; }
-  button:hover, .btn:hover { border-color:#4a5263; }
-  button.on { background:#2f3a33; border-color:var(--acc); }
-  button.primary { background:var(--acc); color:#06210f; border-color:var(--acc); font-weight:600; width:100%; padding:12px; margin-top:16px; }
-  button.primary:hover { background:var(--acc2); }
-  button:disabled { opacity:.5; cursor:default; }
-  .seg { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
-  .seg button { border:0; border-radius:0; flex:1; }
-  .seg button.on { background:var(--acc); color:#06210f; font-weight:600; }
-  .result { display:none; margin-top:16px; }
-  .preview { width:192px; height:192px; border-radius:10px; background: repeating-conic-gradient(#2a2f3a 0 25%, #20242d 0 50%) 0 0/20px 20px; display:block; margin:0 auto 10px; }
-  .files { display:grid; gap:8px; margin-top:10px; }
-  .note { color:var(--mute); font-size:13px; }
-  .warn { color:var(--warn); }
-  .err { color:#ff6b6b; white-space:pre-wrap; font-size:13px; }
-  kbd { background:#262b36; border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:11px; }
-  ol { padding-left:18px; color:var(--mute); font-size:13px; margin:8px 0 0; }
+  .msg { position:absolute; inset:0; display:none; align-items:center; justify-content:center; text-align:center; padding:16px; line-height:1.4; background:rgba(0,0,0,.75); color:#fff; font-size:14px; }
+
+  button, .btn { font:500 13px/1 var(--mono); color:var(--ink); background:transparent; border:1.5px solid var(--line); padding:8px 10px; cursor:pointer; text-decoration:none; display:inline-block; }
+  button:hover, .btn:hover { background:var(--ink); color:var(--paper); }
+  button.on { background:var(--ink); color:var(--paper); }
+  button:disabled { opacity:.4; cursor:default; background:transparent; color:var(--ink); }
+
+  .transport { display:flex; gap:4px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  .transport button { min-width:40px; }
+  .transport .play { background:var(--acc); color:var(--acc-ink); min-width:48px; }
+  .transport .play:hover { background:var(--ink); color:var(--paper); }
+  .clock { margin-left:auto; font:13px var(--mono); }
+
+  #wave { width:100%; height:104px; display:block; margin-top:10px; border:1.5px solid var(--line); background:var(--panel); touch-action:none; }
+  .wavebar { display:flex; gap:8px; align-items:center; margin-top:6px; font-size:12px; color:var(--mute); }
+  .wavebar span { flex:1; }
+  .keys { margin-top:10px; font:11px/1.9 var(--mono); color:var(--mute); display:flex; flex-wrap:wrap; gap:2px 14px; }
+  .keys span { white-space:nowrap; }
+  kbd { font:11px var(--mono); border:1px solid var(--soft); padding:0 4px; color:var(--ink); }
+
+  h2 { font:600 11px/1 var(--mono); text-transform:uppercase; letter-spacing:.08em; margin:20px 0 8px; display:flex; gap:8px; align-items:center; }
+  h2:first-child { margin-top:2px; }
+  h2::after { content:""; flex:1; border-top:1px solid var(--soft); }
+  h2 em { font-style:normal; color:var(--acc); }
+  .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .row + .row { margin-top:6px; }
+  .lbl { width:48px; font:12px var(--mono); color:var(--mute); }
+  .note { color:var(--mute); font-size:12px; }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  input[type=range].fine { width:auto; flex:1; min-width:110px; }
+  input[type=number], select { font:13px var(--mono); color:var(--ink); background:var(--panel); border:1.5px solid var(--line); padding:6px 7px; border-radius:0; }
+  input[type=number] { width:92px; }
+  select { width:100%; }
+  .seg { display:flex; }
+  .seg button { flex:1; }
+  .seg button + button { border-left:0; }
+
+  .go { width:100%; margin-top:20px; padding:13px; font-size:14px; font-weight:700; background:var(--acc); color:var(--acc-ink); border-width:2px; }
+  .go:hover { background:var(--ink); color:var(--paper); }
+  #status { margin-top:8px; font:12px var(--mono); color:var(--mute); min-height:1em; }
+  #status.err { color:#d1291a; white-space:pre-wrap; }
+
+  .result { display:none; margin-top:16px; border-top:2px solid var(--line); padding-top:14px; }
+  .preview { width:200px; height:200px; display:block; margin:0 auto 10px; border:1.5px solid var(--line);
+             background:repeating-conic-gradient(var(--soft) 0 25%, transparent 0 50%) 0 0/16px 16px; }
+  audio { width:100%; height:36px; }
+  #playBoth { width:100%; margin-top:6px; }
+  #info { margin-top:8px; font:12px/1.5 var(--mono); }
+  #info .warn { color:#c2410c; }
+  .files { display:grid; gap:4px; margin-top:10px; }
+  .files .btn { text-align:left; padding:10px; }
+  ol { padding-left:18px; color:var(--mute); font-size:12px; margin:12px 0 0; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Video<span>Stickers</span></h1>
-  <p class="sub">Carga un video, elige el fragmento y genera el sticker animado + su sonido sincronizado para WhatsApp. Todo se procesa en tu navegador: el video no se sube a ningún servidor.</p>
+  <header>
+    <div class="logo"><i></i>videostickers</div>
+    <p>Fragmento de video → sticker animado + sonido para WhatsApp. Todo pasa en tu navegador; el video no se sube a ningún lado.</p>
+  </header>
 
   <div class="grid">
-    <section class="card">
-      <div id="drop" class="drop">Arrastra un video aquí o <u>haz clic para elegirlo</u></div>
+    <section class="panel">
+      <div id="drop" class="drop">Suelta un video aquí o <b>elige un archivo</b></div>
       <input id="file" type="file" accept="video/*" hidden>
 
       <div id="editor" class="editor">
@@ -79,88 +118,90 @@
         </div>
 
         <div class="transport">
-          <button id="bSelStart" title="Ir al inicio del fragmento (Home)">⏮</button>
+          <button id="bSelStart" title="Ir al inicio del fragmento (Home)">|◀</button>
           <button id="bBack1" title="Atrasar 1 s (Shift+←)">−1s</button>
           <button id="bBackF" title="Atrasar 1 cuadro (←)">−1f</button>
           <button id="bPlay" class="play" title="Reproducir / pausar (Espacio)">▶</button>
           <button id="bFwdF" title="Adelantar 1 cuadro (→)">+1f</button>
           <button id="bFwd1" title="Adelantar 1 s (Shift+→)">+1s</button>
-          <button id="bLoop" title="Reproducir solo el fragmento en bucle (L)">🔁 Fragmento</button>
-          <span id="clock" class="clock">0.00 / 0.00</span>
+          <button id="bLoop" title="Reproducir solo el fragmento en bucle (L)">bucle</button>
+          <span id="clock" class="clock">0:00.00 / 0:00.00</span>
         </div>
 
-        <div class="wavebox"><canvas id="wave"></canvas></div>
+        <canvas id="wave"></canvas>
         <div class="wavebar">
-          <span>Clic = mover cursor · arrastra la zona verde o sus bordes para ajustar el fragmento</span>
-          <span class="sp"></span>
-          <button id="bZoom" title="Acercar la vista al fragmento (Z)">🔍 Zoom fragmento</button>
+          <span>Clic para mover el cursor. Arrastra la franja o sus bordes para ajustar el fragmento.</span>
+          <button id="bZoom" title="Acercar la vista al fragmento (Z)">zoom</button>
         </div>
-        <div class="note" style="margin-top:6px">
-          Atajos: <kbd>Espacio</kbd> play · <kbd>←</kbd><kbd>→</kbd> cuadro · <kbd>Shift</kbd>+flechas 1 s · <kbd>I</kbd> inicio aquí · <kbd>O</kbd> fin aquí · <kbd>L</kbd> bucle · <kbd>Z</kbd> zoom · <kbd>Q</kbd><kbd>E</kbd> girar · <kbd>M</kbd> espejo
+        <div class="keys">
+          <span><kbd>espacio</kbd> play</span><span><kbd>←</kbd><kbd>→</kbd> cuadro</span><span><kbd>shift</kbd>+flechas 1 s</span><span><kbd>I</kbd>/<kbd>O</kbd> inicio/fin</span><span><kbd>L</kbd> bucle</span><span><kbd>Z</kbd> zoom</span><span><kbd>Q</kbd>/<kbd>E</kbd> girar</span><span><kbd>M</kbd> espejo</span>
         </div>
       </div>
     </section>
 
-    <section class="card">
-      <label style="margin-top:0">Encuadre</label>
+    <section class="panel">
+      <h2><em>01</em> Encuadre</h2>
       <div class="seg" id="mode">
         <button data-m="crop" class="on">Recorte cuadrado</button>
         <button data-m="fit">Video completo</button>
       </div>
-      <div id="cropSizeWrap">
-        <label>Tamaño del recorte (arrastra el cuadro sobre el video)</label>
+      <div id="cropSizeWrap" style="margin-top:10px">
+        <div class="note">Tamaño del recorte · arrastra el cuadro sobre el video</div>
         <input id="cropSize" type="range" min="20" max="100" value="100">
       </div>
 
-      <label>Rotación</label>
+      <h2><em>02</em> Rotación</h2>
       <div class="row">
-        <button id="bRotL" title="Girar 90° a la izquierda (Q)">⟲ 90°</button>
-        <button id="bRotR" title="Girar 90° a la derecha (E)">⟳ 90°</button>
-        <button id="bFlip" title="Voltear como espejo (M)">⇋ Espejo</button>
-        <button id="bRotReset" title="Quitar rotación">Restablecer</button>
+        <button id="bRotL" title="Girar 90° a la izquierda (Q)">↺ 90°</button>
+        <button id="bRotR" title="Girar 90° a la derecha (E)">↻ 90°</button>
+        <button id="bFlip" title="Voltear como espejo (M)">espejo</button>
+        <button id="bRotReset" title="Quitar rotación">reset</button>
       </div>
-      <div class="row" style="margin-top:6px">
-        <span class="note">Ajuste fino</span>
+      <div class="row">
+        <span class="lbl">fino</span>
         <input id="fine" class="fine" type="range" min="-45" max="45" step="0.5" value="0">
-        <span id="rotInfo" class="note" style="min-width:44px;text-align:right">0°</span>
+        <span id="rotInfo" class="note" style="min-width:44px;text-align:right;font-family:var(--mono)">0°</span>
       </div>
 
-      <label>Fragmento</label>
+      <h2><em>03</em> Fragmento</h2>
       <div class="row">
-        <span class="note" style="width:46px">Inicio</span>
+        <span class="lbl">inicio</span>
         <input id="startN" type="number" step="0.01" min="0" value="0">
-        <button id="bIn" title="Inicio en la posición actual (I)">[ Aquí</button>
+        <button id="bIn" title="Inicio en la posición actual (I)">[ aquí</button>
       </div>
-      <div class="row" style="margin-top:6px">
-        <span class="note" style="width:46px">Fin</span>
+      <div class="row">
+        <span class="lbl">fin</span>
         <input id="endN" type="number" step="0.01" min="0" value="5">
-        <button id="bOut" title="Fin en la posición actual (O)">Aquí ]</button>
+        <button id="bOut" title="Fin en la posición actual (O)">aquí ]</button>
       </div>
-      <div class="row" style="margin-top:6px">
-        <span class="note" style="width:46px">Dura</span>
+      <div class="row">
+        <span class="lbl">dura</span>
         <input id="durN" type="number" step="0.1" min="0.2" max="10" value="5">
-        <span class="note">s (máx. 10 · WhatsApp usa ~5 s de audio en animados)</span>
+        <span class="note">s · máx. 10 (WhatsApp usa ~5 s de audio)</span>
       </div>
 
-      <button id="gen" class="primary" disabled>Generar sticker</button>
-      <div id="status" class="note" style="margin-top:8px"></div>
+      <h2><em>04</em> Fotogramas</h2>
+      <select id="fpsSel"><option value="max">Máximo (todos los cuadros)</option></select>
+      <div class="note" style="margin-top:6px">En "Máximo" se conservan todos los cuadros y se ajusta la calidad para caber en 500 KB. Si la imagen queda borrosa, baja los fps.</div>
+
+      <button id="gen" class="go" disabled>Generar sticker</button>
+      <div id="status"></div>
 
       <div id="result" class="result">
         <img id="outImg" class="preview" alt="sticker">
-        <audio id="outAud" controls style="width:100%"></audio>
-        <button id="playBoth" style="width:100%;margin-top:8px">▶ Probar imagen + sonido juntos</button>
-        <div id="info" class="note" style="margin-top:8px"></div>
+        <audio id="outAud" controls></audio>
+        <button id="playBoth">▶ probar imagen + sonido</button>
+        <div id="info"></div>
         <div id="files" class="files"></div>
         <ol>
-          <li>Descarga el <b>.webp</b> y el <b>.mp3</b> (si lo haces desde el celular, ya quedan ahí).</li>
-          <li>En WhatsApp crea el sticker con la imagen y, en la opción de sonido, elige el audio.</li>
-          <li>Ambos archivos empiezan y duran exactamente lo mismo, así quedan sincronizados.</li>
+          <li>Descarga el <b>.webp</b> y el <b>.mp3</b> (desde el celular quedan ahí mismo).</li>
+          <li>En WhatsApp crea el sticker con la imagen y elige el audio en la opción de sonido.</li>
+          <li>Ambos empiezan y duran exactamente lo mismo: quedan sincronizados.</li>
         </ol>
       </div>
     </section>
   </div>
 </main>
-
 
 <script src="app.js"></script>
 </body>

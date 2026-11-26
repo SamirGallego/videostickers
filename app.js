@@ -1,7 +1,7 @@
 // VideoStickers — todo se procesa en el navegador (apto para GitHub Pages).
 const $ = id => document.getElementById(id);
 const video = $('video'), crop = $('crop'), wave = $('wave');
-const MAXD = 10, MIND = 0.2, SIZE = 512, MAX_BYTES = 500 * 1024;
+const MAXD = 10, MIND = 0.2, SIZE = 512, MAX_BYTES = 500 * 1024, MAX_FPS = 60;
 const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
 const st = { url: null, name: 'sticker', start: 0, dur: 5, fps: 30, audio: null, peaks: null, rate: 100, maxPeak: 1, zoom: false, loop: false };
 let view = { v0: 0, v1: 1 }, dragging = false, mode = 'crop', box = { x: 0, y: 0, w: 1, h: 1 }, outUrls = [];
@@ -71,7 +71,7 @@ async function load(file) {
   $('bLoop').classList.remove('on');
   $('gen').disabled = true; $('result').style.display = 'none'; showMsg('');
   video.src = st.url;
-  $('drop').textContent = '📁 ' + file.name + ' — clic para cambiar'; $('drop').classList.add('small');
+  $('drop').textContent = file.name + '  ·  cambiar video'; $('drop').classList.add('small');
   $('editor').style.display = 'block';
   status('Analizando audio…'); draw();
   try {
@@ -84,7 +84,8 @@ async function load(file) {
     st.audio = null; st.peaks = [];
     status('Listo (no se encontró audio en el video, o el navegador no puede leerlo).');
   }
-  if (!canWebp) status('⚠ Este navegador no puede crear WebP (Safari). Usa Chrome, Edge o Firefox.', true);
+  st.fps = await measureFps(st.url); fillFpsOptions();
+  if (!canWebp) status('Este navegador no puede crear WebP (Safari). Usa Chrome, Edge o Firefox.', true);
   draw();
 }
 function computePeaks(buf) {
@@ -110,23 +111,41 @@ video.onloadedmetadata = () => {
   layoutViewer(); setCropSize(); updateView(); syncInputs(); draw();
 };
 video.onloadeddata = renderViewer;
-video.onplay = video.onpause = () => { $('bPlay').textContent = video.paused ? '▶' : '⏸'; if (!video.paused) { tick(); detectFps(); } };
+video.onplay = video.onpause = () => { $('bPlay').textContent = video.paused ? '▶' : '⏸'; if (!video.paused) tick(); };
 video.onseeked = () => { renderViewer(); draw(); };
 window.addEventListener('resize', () => { layoutViewer(); renderViewer(); draw(); });
 
-let fpsDetected = false;
-function detectFps() { // estima los fps reales para el avance cuadro a cuadro
-  if (fpsDetected || !video.requestVideoFrameCallback) return;
-  fpsDetected = true;
-  let last = null; const diffs = [];
-  const cb = (now, meta) => {
-    if (last != null && meta.mediaTime > last) diffs.push(meta.mediaTime - last);
-    last = meta.mediaTime;
-    if (diffs.length < 12 && !video.paused) video.requestVideoFrameCallback(cb);
-    else if (diffs.length >= 4) { diffs.sort((a, b) => a - b); const f = 1 / diffs[diffs.length >> 1]; if (f > 5 && f < 121) st.fps = f; }
-    else fpsDetected = false;
-  };
-  video.requestVideoFrameCallback(cb);
+// Mide los fps reales del video reproduciendo un instante en silencio (sin tocar el reproductor)
+async function measureFps(url) {
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.src = url;
+  v.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none';
+  document.body.appendChild(v);
+  try {
+    await once(v, 'loadeddata');
+    if (!v.requestVideoFrameCallback) return 30;
+    const times = [];
+    await new Promise(res => {
+      const cb = (now, m) => { times.push(m.mediaTime); if (times.length < 30) v.requestVideoFrameCallback(cb); else res(); };
+      v.requestVideoFrameCallback(cb);
+      v.play().catch(res); setTimeout(res, 4000);
+    });
+    const d = []; for (let i = 1; i < times.length; i++) if (times[i] > times[i - 1]) d.push(times[i] - times[i - 1]);
+    if (d.length < 4) return 30;
+    d.sort((x, y) => x - y);
+    let f = 1 / d[d.length >> 1]; // mediana
+    let best = null;
+    for (const k of [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 90, 120]) if (Math.abs(f - k) / k < 0.07 && (!best || Math.abs(f - k) < Math.abs(f - best))) best = k;
+    if (best) f = best;
+    return clamp(f, 5, 240);
+  } catch { return 30; } finally { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); }
+}
+function fillFpsOptions() {
+  const src = Math.min(MAX_FPS, st.fps), sel = $('fpsSel'), prev = sel.value;
+  const opts = [['max', `Máximo: ${+src.toFixed(2)} fps (todos los cuadros${st.fps > MAX_FPS ? ', tope 60' : ''})`]];
+  for (const f of [30, 25, 24, 20, 15, 12, 10]) if (f < src - 0.5) opts.push([String(f), f + ' fps']);
+  sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  sel.value = opts.some(o => o[0] === prev) ? prev : 'max';
 }
 
 // ================= transporte =================
@@ -192,6 +211,12 @@ function updateView() {
   if (st.zoom) { const pad = Math.max(0.5, st.dur * 0.3); view = { v0: Math.max(0, st.start - pad), v1: Math.min(d, st.start + st.dur + pad) }; }
   else view = { v0: 0, v1: d };
 }
+let C = null; // colores del tema (CSS)
+function themeColors() {
+  const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
+  C = { acc: v('--acc'), wave: v('--wave'), mute: v('--mute'), ink: v('--ink'), soft: v('--soft') };
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { themeColors(); draw(); });
 const xOf = (t, w) => (t - view.v0) / (view.v1 - view.v0 || 1) * w;
 function fmtT(t, ms) {
   if (!isFinite(t)) t = 0;
@@ -201,6 +226,7 @@ function fmtT(t, ms) {
 function draw() {
   const dpr = window.devicePixelRatio || 1, w = wave.clientWidth, h = wave.clientHeight;
   if (!w) return;
+  if (!C) themeColors();
   if (wave.width !== Math.round(w * dpr)) { wave.width = Math.round(w * dpr); wave.height = Math.round(h * dpr); }
   const ctx = wave.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
   const span = view.v1 - view.v0 || 1, top = 16, wh = h - top, mid = top + wh / 2;
@@ -209,12 +235,12 @@ function draw() {
   // regla de tiempo
   const steps = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
   const stp = steps.find(s => span / s <= w / 70) || 600;
-  ctx.fillStyle = '#6b7385'; ctx.font = '10px system-ui'; ctx.textBaseline = 'top';
+  ctx.fillStyle = C.mute; ctx.font = '10px ui-monospace, Consolas, monospace'; ctx.textBaseline = 'top';
   for (let t = Math.ceil(view.v0 / stp) * stp; t <= view.v1; t += stp) {
     const x = xOf(t, w); ctx.fillRect(x, 0, 1, 5);
     ctx.fillText(stp < 1 ? t.toFixed(2) : fmtT(t), x + 3, 2);
   }
-  ctx.fillStyle = 'rgba(37,211,102,.14)'; ctx.fillRect(xs, top, xe - xs, wh);
+  ctx.globalAlpha = 0.13; ctx.fillStyle = C.acc; ctx.fillRect(xs, top, xe - xs, wh); ctx.globalAlpha = 1;
 
   // barras de audio
   if (st.peaks && st.peaks.length) {
@@ -224,19 +250,23 @@ function draw() {
       const i0 = Math.floor(t0 * R), i1 = Math.max(i0 + 1, Math.ceil(t1 * R)); let m = 0;
       for (let i = i0; i < i1 && i < P.length; i++) if (P[i] > m) m = P[i];
       const amp = Math.max(0.5, Math.sqrt(m / st.maxPeak) * (wh / 2 - 3));
-      ctx.fillStyle = px >= xs && px <= xe ? '#25d366' : '#4a5263';
+      ctx.fillStyle = px >= xs && px <= xe ? C.acc : C.wave;
       ctx.fillRect(px, mid - amp, 1, amp * 2);
     }
   } else {
-    ctx.fillStyle = '#4a5263'; ctx.fillRect(0, mid, w, 1);
-    ctx.fillStyle = '#6b7385'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = C.wave; ctx.fillRect(0, mid, w, 1);
+    ctx.fillStyle = C.mute; ctx.textBaseline = 'middle';
     ctx.fillText(st.peaks ? 'Sin audio' : 'Cargando forma de onda…', 8, mid - 10);
   }
   // bordes del fragmento y cursor
-  ctx.fillStyle = '#25d366';
-  for (const x of [xs, xe]) { ctx.fillRect(x - 1, top, 2, wh); ctx.fillRect(x - 4, top, 8, 12); }
+  ctx.fillStyle = C.ink;
+  for (const x of [xs, xe]) { // bordes: línea + pestaña para agarrar
+    ctx.fillStyle = C.ink; ctx.fillRect(x - 1, top, 2, wh); ctx.fillRect(x - 5, h - 14, 10, 14);
+    ctx.fillStyle = C.acc; ctx.fillRect(x - 3, h - 12, 6, 10);
+  }
   const xp = xOf(video.currentTime, w);
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(xp - 1, 0, 2, h);
+  ctx.fillStyle = C.ink; ctx.fillRect(xp - 0.75, 0, 1.5, h); // cursor
+  ctx.beginPath(); ctx.moveTo(xp - 5, 0); ctx.lineTo(xp + 5, 0); ctx.lineTo(xp, 7); ctx.fill();
   $('clock').textContent = fmtT(video.currentTime, true) + ' / ' + fmtT(T(), true);
 }
 function hitTest(px, w) {
@@ -320,11 +350,38 @@ document.querySelectorAll('#mode button').forEach(b => b.onclick = () => {
 
 // ================= generación (todo en el navegador) =================
 function status(t, err) { $('status').textContent = t; $('status').className = err ? 'err' : 'note'; }
-const once = (el, ev) => new Promise((res, rej) => {
+var once = (el, ev) => new Promise((res, rej) => {
   const ok = () => { el.removeEventListener('error', bad); res(); };
   const bad = () => { el.removeEventListener(ev, ok); rej(new Error('No se pudo leer el video')); };
   el.addEventListener(ev, ok, { once: true }); el.addEventListener('error', bad, { once: true });
 });
+
+// Extrae TODOS los cuadros del tramo a los fps pedidos. Para cada uno guarda un PNG (sin pérdida)
+// y el rectángulo que cambió respecto a lo que ya se ve (para codificar solo esa zona).
+const DIFF = 10; // diferencia mínima por canal para considerar que un píxel cambió
+function diffRect(ref, px) {
+  let x0 = SIZE, y0 = SIZE, x1 = -1, y1 = -1;
+  for (let y = 0; y < SIZE; y++) {
+    let o = y * SIZE * 4;
+    for (let x = 0; x < SIZE; x++, o += 4) {
+      if (Math.abs(ref[o] - px[o]) > DIFF || Math.abs(ref[o + 1] - px[o + 1]) > DIFF ||
+          Math.abs(ref[o + 2] - px[o + 2]) > DIFF || Math.abs(ref[o + 3] - px[o + 3]) > DIFF) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; y1 = y;
+      }
+    }
+  }
+  if (x1 < 0) return null; // cuadro idéntico al anterior
+  x0 &= ~1; y0 &= ~1; // WebP exige offsets pares
+  return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+function copyRect(ref, px, r) {
+  for (let y = r.y; y < r.y + r.h; y++) { const o = (y * SIZE + r.x) * 4; ref.set(px.subarray(o, o + r.w * 4), o); }
+}
+function unionRect(a, b) {
+  if (!a) return b; if (!b) return a;
+  const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
+  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
+}
 
 async function grabFrames(start, dur, fps, onProgress) {
   const v = document.createElement('video');
@@ -334,10 +391,11 @@ async function grabFrames(start, dur, fps, onProgress) {
   const rc = document.createElement('canvas'); rc.width = vw; rc.height = vh; // cuadro rotado a resolución original
   const rg = rc.getContext('2d');
   const c = document.createElement('canvas'); c.width = c.height = SIZE;
-  const g = c.getContext('2d');
+  const g = c.getContext('2d', { willReadFrequently: true });
   const n = Math.max(1, Math.round(dur * fps)), frames = [];
+  let ref = null;
   for (let i = 0; i < n; i++) {
-    v.currentTime = Math.min(start + i / fps, start + dur - 0.001);
+    v.currentTime = Math.min(start + (i + 0.5) / fps, start + dur - 0.001); // centro del cuadro = cuadro exacto
     await once(v, 'seeked');
     rg.clearRect(0, 0, vw, vh);
     drawRotated(rg, v, ow, oh);
@@ -348,30 +406,49 @@ async function grabFrames(start, dur, fps, onProgress) {
       const s = SIZE / Math.max(vw, vh), w = vw * s, h = vh * s;
       g.drawImage(rc, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
     }
-    frames.push(await createImageBitmap(c));
+    const px = g.getImageData(0, 0, SIZE, SIZE).data;
+    let rect;
+    if (!ref) { ref = new Uint8ClampedArray(px); rect = { x: 0, y: 0, w: SIZE, h: SIZE }; }
+    else { rect = diffRect(ref, px); if (rect) copyRect(ref, px, rect); }
+    frames.push({ blob: await new Promise(r => c.toBlob(r, 'image/png')), rect });
     if (onProgress) onProgress((i + 1) / n);
   }
   v.removeAttribute('src'); v.load();
   return frames;
 }
 
-// --- WebP animado: une los cuadros WebP del canvas en un RIFF con VP8X + ANIM + ANMF ---
-const encCanvas = document.createElement('canvas'); encCanvas.width = encCanvas.height = SIZE;
-async function encodeFrame(bmp, q) {
-  const g = encCanvas.getContext('2d'); g.clearRect(0, 0, SIZE, SIZE); g.drawImage(bmp, 0, 0);
-  const blob = await new Promise(r => encCanvas.toBlob(r, 'image/webp', q));
+// Lista de cuadros a escribir conservando 1 de cada `step`. Los cuadros sin cambios no se escriben:
+// su tiempo se suma al cuadro anterior (se ve exactamente igual y ahorra espacio).
+function planFrames(frames, step, fps, dur) {
+  const items = []; let pending = null;
+  for (let i = 0; i < frames.length; i++) {
+    pending = unionRect(pending, frames[i].rect);
+    if (i % step !== 0) continue;
+    if (pending || !items.length) items.push({ idx: i, rect: pending || { x: 0, y: 0, w: SIZE, h: SIZE }, t: i * 1000 / fps });
+    pending = null;
+  }
+  items.forEach((it, k) => { const end = k + 1 < items.length ? items[k + 1].t : dur * 1000; it.d = Math.max(8, Math.round(end) - Math.round(it.t)); });
+  return items;
+}
+
+// --- WebP animado: une cuadros WebP del canvas en un RIFF con VP8X + ANIM + ANMF ---
+async function encodeItem(frames, it, q) {
+  const r = it.rect, bmp = await createImageBitmap(frames[it.idx].blob, r.x, r.y, r.w, r.h);
+  const cv = document.createElement('canvas'); cv.width = r.w; cv.height = r.h;
+  cv.getContext('2d').drawImage(bmp, 0, 0); bmp.close();
+  const blob = await new Promise(res => cv.toBlob(res, 'image/webp', q));
   const b = new Uint8Array(await blob.arrayBuffer()), dv = new DataView(b.buffer);
-  const chunks = []; let alpha = false;
+  const chunks = []; let alpha = false, bytes = 24;
   for (let p = 12; p + 8 <= b.length;) {
     const id = String.fromCharCode(b[p], b[p + 1], b[p + 2], b[p + 3]), len = dv.getUint32(p + 4, true);
     const total = 8 + len + (len & 1);
-    if (id === 'ALPH' || id === 'VP8 ' || id === 'VP8L') chunks.push(b.subarray(p, p + total));
+    if (id === 'ALPH' || id === 'VP8 ' || id === 'VP8L') { chunks.push(b.subarray(p, p + total)); bytes += total; }
     if (id === 'ALPH') alpha = true;
     if (id === 'VP8L' && (b[p + 8 + 4] & 0x10)) alpha = true;
     p += total;
   }
   if (!chunks.length) throw new Error('El navegador no generó WebP');
-  return { chunks, alpha };
+  return { chunks, alpha, bytes };
 }
 function u24(a, o, v) { a[o] = v & 255; a[o + 1] = (v >> 8) & 255; a[o + 2] = (v >> 16) & 255; }
 function riffChunk(id, parts) {
@@ -381,16 +458,16 @@ function riffChunk(id, parts) {
   let o = 8; for (const p of parts) { out.set(p, o); o += p.length; }
   return out;
 }
-async function buildWebp(frames, fps, q, total) {
+async function buildWebp(frames, items, q, onProgress) {
   const parts = []; let anyAlpha = false;
-  for (let i = 0; i < frames.length; i++) {
-    const f = await encodeFrame(frames[i], q); anyAlpha = anyAlpha || f.alpha;
-    const endMs = i === frames.length - 1 ? total * 1000 : (i + 1) * 1000 / fps; // el último cuadro cierra justo con el audio
-    const d = Math.max(8, Math.round(endMs) - Math.round(i * 1000 / fps));
+  for (let k = 0; k < items.length; k++) {
+    const it = items[k], f = await encodeItem(frames, it, q); anyAlpha = anyAlpha || f.alpha;
     const hdr = new Uint8Array(16);
-    u24(hdr, 6, SIZE - 1); u24(hdr, 9, SIZE - 1); u24(hdr, 12, d);
-    hdr[15] = 0x02; // sin mezcla: cada cuadro reemplaza al anterior
+    u24(hdr, 0, it.rect.x / 2); u24(hdr, 3, it.rect.y / 2);
+    u24(hdr, 6, it.rect.w - 1); u24(hdr, 9, it.rect.h - 1); u24(hdr, 12, it.d);
+    hdr[15] = 0x02; // sin mezcla y sin borrar: el rectángulo reemplaza esa zona y el resto se conserva
     parts.push(riffChunk('ANMF', [hdr, ...f.chunks]));
+    if (onProgress) onProgress((k + 1) / items.length);
   }
   const vp8x = new Uint8Array(10); vp8x[0] = 0x02 | (anyAlpha ? 0x10 : 0); u24(vp8x, 4, SIZE - 1); u24(vp8x, 7, SIZE - 1);
   const anim = new Uint8Array(6); // fondo transparente, bucle infinito
@@ -398,6 +475,27 @@ async function buildWebp(frames, fps, q, total) {
   const len = body.reduce((s, p) => s + p.length, 0), head = new Uint8Array(8);
   head.set(new TextEncoder().encode('RIFF')); new DataView(head.buffer).setUint32(4, len, true);
   return new Blob([head, ...body], { type: 'image/webp' });
+}
+
+// Mayor calidad posible que quepa en 500 KB con TODOS los cuadros; solo si ni con calidad mínima
+// cabe, se quitan cuadros (1 de cada 2, luego 1 de cada 3…).
+async function encodeBest(frames, fps, dur) {
+  for (const step of [1, 2, 3, 4, 6, 8]) {
+    const items = planFrames(frames, step, fps, dur);
+    const ns = Math.min(items.length, 16), sample = [];
+    for (let j = 0; j < ns; j++) sample.push(items[Math.floor(j * items.length / ns)]);
+    const est = async q => { let s = 0; for (const it of sample) s += (await encodeItem(frames, it, q)).bytes; return 40 + s * items.length / ns; };
+    const fpsTxt = +(fps / step).toFixed(2);
+    status(`Calculando calidad para ${items.length} cuadros (${fpsTxt} fps)…`);
+    if (await est(0) > MAX_BYTES * 0.95) continue; // ni con calidad mínima cabe: quitar cuadros
+    let lo = 0, hi = 1;
+    for (let k = 0; k < 6; k++) { const m = (lo + hi) / 2; if (await est(m) <= MAX_BYTES * 0.92) lo = m; else hi = m; }
+    for (let q = lo; q >= 0; q -= 0.06) {
+      const webp = await buildWebp(frames, items, q, p => status(`Codificando ${items.length} cuadros (${fpsTxt} fps, calidad ${Math.round(q * 100)})… ${Math.round(p * 100)}%`));
+      if (webp.size <= MAX_BYTES) return { webp, used: { fps: fpsTxt, q: Math.round(q * 100), frames: items.length, total: Math.ceil(frames.length / step) } };
+    }
+  }
+  throw new Error('No fue posible que el sticker quepa en 500 KB. Acorta el fragmento.');
 }
 
 // --- audio: el mismo tramo exacto + MP3 (lamejs) y WAV ---
@@ -437,20 +535,13 @@ $('gen').onclick = async () => {
   if (!T()) return;
   video.pause(); setLoop(false); video.pause();
   $('gen').disabled = true;
-  const start = st.start, dur = st.dur, fps = 15;
+  const start = st.start, dur = st.dur;
+  const src = Math.min(MAX_FPS, st.fps || 30), sel = $('fpsSel').value;
+  const fps = sel === 'max' ? src : Math.min(+sel, src);
   try {
     status('Extrayendo cuadros… 0%');
-    const frames = await grabFrames(start, dur, fps, p => status(`Extrayendo cuadros… ${Math.round(p * 100)}%`));
-    // baja la calidad y luego los fps hasta caber en 500 KB
-    const plan = [[1, 0.8], [1, 0.65], [1, 0.5], [1, 0.4], [1, 0.3], [2, 0.5], [2, 0.35], [2, 0.2], [3, 0.2]];
-    let webp, used;
-    for (const [skip, q] of plan) {
-      status(`Codificando WebP (calidad ${Math.round(q * 100)}, ${+(fps / skip).toFixed(1)} fps)…`);
-      webp = await buildWebp(frames.filter((_, i) => i % skip === 0), fps / skip, q, dur);
-      used = { fps: +(fps / skip).toFixed(1), q: Math.round(q * 100) };
-      if (webp.size <= MAX_BYTES) break;
-    }
-    frames.forEach(f => f.close && f.close());
+    const frames = await grabFrames(start, dur, fps, p => status(`Extrayendo cuadros (${+fps.toFixed(2)} fps)… ${Math.round(p * 100)}%`));
+    const { webp, used } = await encodeBest(frames, fps, dur);
     let mp3 = null, wav = null;
     if (st.audio) { const a = sliceAudio(st.audio, start, dur); mp3 = encodeMp3(a); wav = encodeWav(a); }
     show({ webp, mp3, wav, used, start });
@@ -469,15 +560,17 @@ function show({ webp, mp3, wav, used, start }) {
   const aud = mp3 || wav, hasA = !!aud;
   $('outAud').style.display = $('playBoth').style.display = hasA ? '' : 'none';
   if (hasA) $('outAud').src = url(aud);
-  $('info').innerHTML = `WebP: ${(webp.size / 1024).toFixed(1)} KB · ${used.fps} fps · calidad ${used.q}` +
+  $('info').innerHTML = `WebP: ${(webp.size / 1024).toFixed(1)} KB · <b>${used.total} cuadros</b> a ${used.fps} fps · calidad ${used.q}` +
+    (used.frames < used.total ? ` · ${used.total - used.frames} cuadros repetidos fusionados` : '') +
     (webp.size <= MAX_BYTES ? '' : ' <span class="warn">(supera 500 KB: reduce la duración)</span>') +
+    (used.q < 25 ? '<br><span class="warn">Calidad baja para caber en 500 KB con tantos cuadros. Si se ve borroso, baja los fps o acorta el fragmento.</span>' : '') +
     (hasA ? '' : '<br><span class="warn">Sin audio en este video.</span>');
   const base = `${st.name}_${start.toFixed(1)}s`;
   $('files').innerHTML = '';
   for (const [label, blob, ext] of files) {
     const a = document.createElement('a');
     a.className = 'btn'; a.href = url(blob); a.download = `${base}.${ext}`;
-    a.textContent = `⬇ ${label} · ${(blob.size / 1024).toFixed(0)} KB`;
+    a.textContent = `↓ ${a.download}  ·  ${label}  ·  ${(blob.size / 1024).toFixed(0)} KB`;
     $('files').appendChild(a);
   }
 }
